@@ -1,0 +1,126 @@
+# Basic Docker Stack Configuration for Claude Flow v2
+# Optimized for development and testing environments
+# Resource requirements: 4GB RAM, 2 CPU cores minimum
+
+version: '3.8'
+
+services:
+  claude-flow-alpha:
+    image: claude-flow-alpha:latest
+    
+    # Port mappings for basic setup
+    ports:
+      - target: 3000
+        published: 4000
+        protocol: tcp
+        mode: ingress
+      - target: 3001
+        published: 4001
+        protocol: tcp
+        mode: ingress
+      - target: 8080
+        published: 4080
+        protocol: tcp
+        mode: ingress
+
+    # Basic environment configuration
+    environment:
+      - NODE_ENV=development
+      - API_PORT=4000
+      - UI_PORT=4001
+      - TOOLS_PORT=4080
+      - LOG_LEVEL=info
+      - MAX_AGENTS=16
+      - WEBSOCKET_TIMEOUT=30000
+
+    # Conservative resource limits for basic setup
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        monitor: 30s
+        order: stop-first
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+        failure_action: pause
+        monitor: 30s
+        order: stop-first
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+      placement:
+        constraints:
+          - node.role == manager
+
+    # Security configuration
+    secrets:
+      - anthropic_api_key
+    
+    # Basic volume mounts
+    volumes:
+      - claude_flow_data:/home/claude-user/data
+      - claude_flow_config:/home/claude-user/.config
+      - claude_projects:/home/claude-user/projects
+
+    # Network configuration
+    networks:
+      - claude-flow-network
+
+    # Health check configuration
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+# Volume definitions
+volumes:
+  claude_flow_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data
+  
+  claude_flow_config:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./config
+  
+  claude_projects:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./projects
+
+# Secret definitions
+secrets:
+  anthropic_api_key:
+    external: true
+
+# Network definitions
+networks:
+  claude-flow-network:
+    driver: overlay
+    attachable: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.1.0.0/24
+          gateway: 10.1.0.1

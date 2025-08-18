@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DockerFlow - AI Development, Containerized</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fab fa-docker"></i>
+                    <span>DockerFlow</span>
+                    <span class="version">v1.0.0</span>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-secondary" id="agent-status-btn">
+                        <i class="fas fa-users"></i>
+                        Agents: <span id="agent-count">0</span>
+                    </button>
+                    <button class="btn btn-primary" id="init-wizard-btn">
+                        <i class="fas fa-magic"></i>
+                        Initialize
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Layout -->
+        <div class="main-layout">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <nav class="nav">
+                    <ul>
+                        <li><a href="#console" class="nav-link active"><i class="fas fa-terminal"></i> Console</a></li>
+                        <li><a href="#agents" class="nav-link"><i class="fas fa-users"></i> Agents</a></li>
+                        <li><a href="#swarm" class="nav-link"><i class="fas fa-network-wired"></i> Swarm</a></li>
+                        <li><a href="#projects" class="nav-link"><i class="fas fa-folder"></i> Projects</a></li>
+                        <li><a href="#logs" class="nav-link"><i class="fas fa-file-alt"></i> Logs</a></li>
+                    </ul>
+                </nav>
+
+                <!-- Quick Actions -->
+                <div class="quick-actions">
+                    <h3>Quick Actions</h3>
+                    <button class="action-btn" data-command="help">
+                        <i class="fas fa-question-circle"></i>
+                        Show Help
+                    </button>
+                    <button class="action-btn" data-command="status">
+                        <i class="fas fa-info-circle"></i>
+                        System Status
+                    </button>
+                    <button class="action-btn" data-command="swarm init">
+                        <i class="fas fa-play"></i>
+                        Start Swarm
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="main-content">
+                <!-- Console Tab -->
+                <div id="console-tab" class="tab-content active">
+                    <div class="console-header">
+                        <h2><i class="fas fa-terminal"></i> DockerFlow Console</h2>
+                        <div class="console-actions">
+                            <button class="btn btn-sm" id="clear-console">
+                                <i class="fas fa-broom"></i> Clear
+                            </button>
+                            <button class="btn btn-sm" id="natural-language-toggle">
+                                <i class="fas fa-comments"></i> Natural Language
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Console Output -->
+                    <div class="console-output" id="console-output">
+                        <div class="console-line welcome">
+                            <span class="prompt">DockerFlow</span>
+                            <span class="text">Welcome to DockerFlow v1.0.0 - AI Development, Containerized</span>
+                        </div>
+                        <div class="console-line info">
+                            <span class="prompt">System</span>
+                            <span class="text">Type 'help' for available commands or use natural language</span>
+                        </div>
+                    </div>
+
+                    <!-- Console Input -->
+                    <div class="console-input-container">
+                        <div class="input-wrapper">
+                            <span class="prompt-symbol">$</span>
+                            <input type="text" id="console-input" placeholder="Enter command or describe what you want to build..." autocomplete="off">
+                            <button class="send-btn" id="send-command">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                        <div class="input-suggestions" id="input-suggestions"></div>
+                    </div>
+                </div>
+
+                <!-- Agents Tab -->
+                <div id="agents-tab" class="tab-content">
+                    <div class="agents-header">
+                        <h2><i class="fas fa-users"></i> Agent Management</h2>
+                        <button class="btn btn-primary" id="spawn-agent-btn">
+                            <i class="fas fa-plus"></i> Spawn Agent
+                        </button>
+                    </div>
+                    
+                    <div class="agents-grid" id="agents-grid">
+                        <div class="agent-card placeholder">
+                            <div class="agent-icon"><i class="fas fa-robot"></i></div>
+                            <h3>No Active Agents</h3>
+                            <p>Initialize DockerFlow to start spawning agents</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Swarm Tab -->
+                <div id="swarm-tab" class="tab-content">
+                    <div class="swarm-header">
+                        <h2><i class="fas fa-network-wired"></i> Swarm Coordination</h2>
+                        <div class="swarm-status">
+                            <span class="status-indicator" id="swarm-status">Inactive</span>
+                        </div>
+                    </div>
+                    
+                    <div class="swarm-content">
+                        <div class="swarm-visualization" id="swarm-viz">
+                            <div class="node central-node">
+                                <i class="fas fa-brain"></i>
+                                <span>Hive Mind</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Projects Tab -->
+                <div id="projects-tab" class="tab-content">
+                    <div class="projects-header">
+                        <h2><i class="fas fa-folder"></i> Projects</h2>
+                        <button class="btn btn-primary" id="new-project-btn">
+                            <i class="fas fa-plus"></i> New Project
+                        </button>
+                    </div>
+                    
+                    <div class="projects-grid" id="projects-grid">
+                        <div class="project-card placeholder">
+                            <div class="project-icon"><i class="fas fa-folder-open"></i></div>
+                            <h3>No Projects</h3>
+                            <p>Create your first project to get started</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Logs Tab -->
+                <div id="logs-tab" class="tab-content">
+                    <div class="logs-header">
+                        <h2><i class="fas fa-file-alt"></i> System Logs</h2>
+                        <div class="log-controls">
+                            <button class="btn btn-sm" id="refresh-logs">
+                                <i class="fas fa-sync"></i> Refresh
+                            </button>
+                            <button class="btn btn-sm" id="download-logs">
+                                <i class="fas fa-download"></i> Download
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="logs-content" id="logs-content">
+                        <div class="log-entry">
+                            <span class="timestamp">[00:00:00]</span>
+                            <span class="level info">INFO</span>
+                            <span class="message">DockerFlow system started</span>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    
+    <!-- Initialization Wizard Modal -->
+    <div class="modal" id="init-wizard-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-magic"></i> DockerFlow Initialization Wizard</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="wizard-step active" data-step="1">
+                    <h4>Step 1: System Check</h4>
+                    <p>Verifying DockerFlow environment and dependencies...</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="init-progress"></div>
+                    </div>
+                    <div class="check-results" id="check-results"></div>
+                </div>
+                
+                <div class="wizard-step" data-step="2">
+                    <h4>Step 2: Initialize Claude-Flow Alpha</h4>
+                    <p>Setting up claude-flow@alpha with MCP capabilities...</p>
+                    <div class="terminal-output" id="init-terminal"></div>
+                </div>
+                
+                <div class="wizard-step" data-step="3">
+                    <h4>Step 3: Ready to Use</h4>
+                    <p>DockerFlow is now ready! You can start building with AI agents.</p>
+                    <div class="success-message">
+                        <i class="fas fa-check-circle"></i>
+                        Initialization Complete
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="wizard-prev">Previous</button>
+                <button class="btn btn-primary" id="wizard-next">Next</button>
+                <button class="btn btn-success" id="wizard-finish" style="display: none;">Finish</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Agent Spawn Modal -->
+    <div class="modal" id="spawn-agent-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-robot"></i> Spawn New Agent</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="agent-types">
+                    <div class="agent-type" data-type="architect">
+                        <i class="fas fa-drafting-compass"></i>
+                        <h4>Architect</h4>
+                        <p>System design and architecture planning</p>
+                    </div>
+                    <div class="agent-type" data-type="developer">
+                        <i class="fas fa-code"></i>
+                        <h4>Developer</h4>
+                        <p>Code implementation and development</p>
+                    </div>
+                    <div class="agent-type" data-type="tester">
+                        <i class="fas fa-bug"></i>
+                        <h4>Tester</h4>
+                        <p>Quality assurance and testing</p>
+                    </div>
+                    <div class="agent-type" data-type="researcher">
+                        <i class="fas fa-search"></i>
+                        <h4>Researcher</h4>
+                        <p>Research and analysis tasks</p>
+                    </div>
+                </div>
+                <div class="agent-config">
+                    <label for="agent-name">Agent Name:</label>
+                    <input type="text" id="agent-name" placeholder="Enter agent name">
+                    
+                    <label for="agent-task">Initial Task:</label>
+                    <textarea id="agent-task" placeholder="Describe what this agent should work on..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-close">Cancel</button>
+                <button class="btn btn-primary" id="spawn-agent-confirm">Spawn Agent</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="loading-spinner"></div>
+        <p>Processing command...</p>
+    </div>
+
+    <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,216 @@
+name: 💡 Feature Request
+description: Suggest a new feature for Claude Flow v2 Docker Swarm deployment
+title: "[FEATURE] "
+labels: ["enhancement", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new feature! Please provide as much detail as possible about your idea.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission checklist
+      description: Please check the following before submitting your feature request
+      options:
+        - label: I have searched existing issues to make sure this isn't a duplicate
+          required: true
+        - label: I have checked the [roadmap](../../discussions/categories/roadmap) for planned features
+          required: true
+        - label: I have read the [documentation](../../docs/) to understand current capabilities
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Description
+      description: What problem does this feature solve? What's the current limitation?
+      placeholder: |
+        Describe the problem or limitation you're experiencing...
+        
+        For example: "Currently, it's difficult to monitor multiple Claude Flow instances because..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you'd like to see implemented
+      placeholder: |
+        Describe your proposed solution in detail...
+        
+        For example: "Add a centralized dashboard that can connect to multiple instances and show..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Feature Category
+      description: Which area does this feature belong to?
+      options:
+        - UI/UX improvements
+        - API enhancements
+        - Docker/Swarm features
+        - Management and automation
+        - Monitoring and observability
+        - Security improvements
+        - Performance optimizations
+        - Documentation
+        - Developer experience
+        - Integration with external services
+        - Other (please specify in description)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature to you?
+      options:
+        - Critical (blocking current work)
+        - High (would significantly improve workflow)
+        - Medium (nice to have, would be useful)
+        - Low (minor improvement)
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Describe any alternative solutions or features you've considered
+      placeholder: |
+        What other approaches have you considered?
+        
+        For example: "I considered using external monitoring tools, but they don't integrate well with..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: use-cases
+    attributes:
+      label: Use Cases
+      description: Describe specific use cases where this feature would be beneficial
+      placeholder: |
+        Provide concrete examples of how this feature would be used:
+        
+        1. As a DevOps engineer, I want to...
+        2. When deploying to production, I need to...
+        3. For debugging issues, it would help to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: What would constitute a successful implementation of this feature?
+      placeholder: |
+        Define what "done" looks like for this feature:
+        
+        - [ ] The feature should allow users to...
+        - [ ] It should integrate with existing...
+        - [ ] Performance impact should be minimal...
+        - [ ] Documentation should be updated...
+    validations:
+      required: false
+
+  - type: textarea
+    id: mockups
+    attributes:
+      label: Mockups/Wireframes
+      description: If applicable, add mockups, wireframes, or visual examples
+      placeholder: |
+        Drag and drop images here, paste them directly, or link to external mockups.
+        
+        Visual examples help us understand your vision for the feature.
+    validations:
+      required: false
+
+  - type: textarea
+    id: technical
+    attributes:
+      label: Technical Considerations
+      description: Any technical details, constraints, or implementation ideas
+      placeholder: |
+        Share any technical thoughts about implementation:
+        
+        - Potential API changes needed
+        - Database schema considerations
+        - Performance implications
+        - Security considerations
+        - Compatibility requirements
+    validations:
+      required: false
+
+  - type: dropdown
+    id: breaking
+    attributes:
+      label: Breaking Changes
+      description: Would this feature require breaking changes?
+      options:
+        - "No, this should be backward compatible"
+        - "Minor breaking changes might be needed"
+        - "Significant breaking changes would be required"
+        - "I'm not sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Current Workaround
+      description: How are you currently working around this limitation?
+      placeholder: |
+        Describe any current workarounds you're using...
+        
+        This helps us understand the urgency and impact of the feature.
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Add any other context, links, or information about the feature request
+      placeholder: |
+        Any additional information that might be helpful:
+        
+        - Links to similar features in other tools
+        - References to relevant standards or best practices
+        - Community feedback or requests you've seen
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Are you interested in contributing to this feature?
+      options:
+        - label: I would like to implement this feature myself
+        - label: I can help with design and planning
+        - label: I can provide testing and feedback
+        - label: I can help with documentation
+        - label: I can sponsor/fund development of this feature
+
+  - type: checkboxes
+    id: community
+    attributes:
+      label: Community Impact
+      description: Who would benefit from this feature?
+      options:
+        - label: Individual developers
+        - label: Small teams (2-10 people)
+        - label: Medium teams (10-50 people)
+        - label: Large organizations (50+ people)
+        - label: Open source projects
+        - label: Enterprise deployments
+        - label: Educational institutions
+        - label: Research organizations

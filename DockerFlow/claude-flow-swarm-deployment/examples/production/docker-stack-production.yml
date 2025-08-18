@@ -1,0 +1,272 @@
+# Production Docker Stack Configuration for Claude Flow v2
+# Optimized for high-availability production environments
+# Resource requirements: 16GB RAM, 8 CPU cores minimum
+
+version: '3.8'
+
+services:
+  claude-flow-alpha:
+    image: claude-flow-alpha:latest
+    
+    # Production port mappings with ingress load balancing
+    ports:
+      - target: 3000
+        published: 4000
+        protocol: tcp
+        mode: ingress
+      - target: 3001
+        published: 4001
+        protocol: tcp
+        mode: ingress
+      - target: 8080
+        published: 4080
+        protocol: tcp
+        mode: ingress
+      - target: 9000
+        published: 9000
+        protocol: tcp
+        mode: ingress
+
+    # Production environment configuration
+    environment:
+      - NODE_ENV=production
+      - API_PORT=4000
+      - UI_PORT=4001
+      - TOOLS_PORT=4080
+      - METRICS_PORT=9000
+      - LOG_LEVEL=warn
+      - MAX_AGENTS=64
+      - WEBSOCKET_TIMEOUT=60000
+      - API_RATE_LIMIT=1000
+      - MAX_CONCURRENT_TASKS=100
+      - WORKER_POOL_SIZE=32
+      - CACHE_SIZE=5000
+      - ENABLE_METRICS=true
+      - ENABLE_TRACING=true
+
+    # Production deployment configuration
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+        window: 300s
+      update_config:
+        parallelism: 1
+        delay: 30s
+        failure_action: rollback
+        monitor: 60s
+        order: start-first
+        max_failure_ratio: 0.3
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: pause
+        monitor: 60s
+        order: stop-first
+        max_failure_ratio: 0.3
+      
+      # Production resource limits
+      resources:
+        limits:
+          memory: 16G
+          cpus: '8.0'
+        reservations:
+          memory: 8G
+          cpus: '4.0'
+      
+      # Placement constraints for production
+      placement:
+        constraints:
+          - node.role == worker
+          - node.labels.environment == production
+        preferences:
+          - spread: node.labels.zone
+        max_replicas_per_node: 1
+
+    # Enhanced security for production
+    secrets:
+      - source: anthropic_api_key
+        target: /run/secrets/anthropic_api_key
+        mode: 0400
+      - source: ssl_cert
+        target: /run/secrets/ssl_cert
+        mode: 0400
+      - source: ssl_key
+        target: /run/secrets/ssl_key
+        mode: 0400
+    
+    # Production volume configuration
+    volumes:
+      - claude_flow_data:/home/claude-user/data
+      - claude_flow_config:/home/claude-user/.config
+      - claude_projects:/home/claude-user/projects
+      - claude_logs:/home/claude-user/logs
+      - claude_cache:/tmp/claude-cache
+
+    # Production network configuration
+    networks:
+      - claude-flow-internal
+      - claude-flow-external
+      - monitoring
+
+    # Enhanced health check for production
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+
+    # Production logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+        labels: "production,claude-flow"
+
+  # Redis for session management and caching
+  redis:
+    image: redis:7-alpine
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+      placement:
+        constraints:
+          - node.role == worker
+    volumes:
+      - redis_data:/data
+    networks:
+      - claude-flow-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx reverse proxy for production
+  nginx:
+    image: nginx:alpine
+    ports:
+      - target: 80
+        published: 80
+        protocol: tcp
+        mode: ingress
+      - target: 443
+        published: 443
+        protocol: tcp
+        mode: ingress
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    configs:
+      - source: nginx_config
+        target: /etc/nginx/nginx.conf
+    secrets:
+      - source: ssl_cert
+        target: /etc/ssl/certs/server.crt
+      - source: ssl_key
+        target: /etc/ssl/private/server.key
+    networks:
+      - claude-flow-external
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# Production volume definitions
+volumes:
+  claude_flow_data:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=nfs-server,rw
+      device: ":/exports/claude-flow/data"
+  
+  claude_flow_config:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=nfs-server,rw
+      device: ":/exports/claude-flow/config"
+  
+  claude_projects:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=nfs-server,rw
+      device: ":/exports/claude-flow/projects"
+  
+  claude_logs:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=nfs-server,rw
+      device: ":/exports/claude-flow/logs"
+  
+  claude_cache:
+    driver: local
+  
+  redis_data:
+    driver: local
+
+# Production secrets
+secrets:
+  anthropic_api_key:
+    external: true
+  
+  ssl_cert:
+    external: true
+  
+  ssl_key:
+    external: true
+
+# Production configs
+configs:
+  nginx_config:
+    external: true
+
+# Production networks
+networks:
+  claude-flow-internal:
+    driver: overlay
+    encrypted: true
+    internal: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.1.0.0/24
+          gateway: 10.1.0.1
+  
+  claude-flow-external:
+    driver: overlay
+    encrypted: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.2.0.0/24
+          gateway: 10.2.0.1
+  
+  monitoring:
+    driver: overlay
+    encrypted: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.3.0.0/24
+          gateway: 10.3.0.1

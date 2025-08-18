@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  dockerflow-service:
+    build: .
+    image: dockerflow:v3
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          memory: 8G
+          cpus: '6.0'
+        reservations:
+          memory: 4G
+          cpus: '3.0'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: stop-first
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: pause
+        order: stop-first
+    secrets:
+      - anthropic_api_key
+    volumes:
+      # Persistent application data
+      - dockerflow_data:/home/claude-user/.dockerflow
+      - dockerflow_config:/home/claude-user/.config
+      - npm_cache:/home/claude-user/.npm-global
+      # Shared project workspace
+      - dockerflow_projects:/workspace/projects
+      - dockerflow_data_shared:/workspace/data
+      - dockerflow_logs:/workspace/logs
+      - dockerflow_shared:/workspace/shared
+      # Docker socket for container management
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - target: 3000
+        published: 4000
+        protocol: tcp
+        mode: ingress
+      - target: 3001
+        published: 4001
+        protocol: tcp
+        mode: ingress
+      - target: 8080
+        published: 4080
+        protocol: tcp
+        mode: ingress
+    networks:
+      - dockerflow-network
+    environment:
+      - NODE_ENV=development
+      - PYTHONUNBUFFERED=1
+      - SERVICE_NAME=dockerflow-service
+    hostname: "dockerflow-{{.Task.Slot}}"
+
+secrets:
+  anthropic_api_key:
+    external: true
+
+volumes:
+  dockerflow_data:
+    driver: local
+  dockerflow_config:
+    driver: local
+  npm_cache:
+    driver: local
+  dockerflow_projects:
+    driver: local
+  dockerflow_data_shared:
+    driver: local
+  dockerflow_logs:
+    driver: local
+  dockerflow_shared:
+    driver: local
+
+networks:
+  dockerflow-network:
+    driver: overlay
+    attachable: true
+    ipam:
+      config:
+        - subnet: 10.1.0.0/24

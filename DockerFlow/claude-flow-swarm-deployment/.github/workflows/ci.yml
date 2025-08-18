@@ -1,0 +1,425 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  release:
+    types: [ published ]
+
+env:
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+jobs:
+  # Linting and validation
+  lint:
+    runs-on: ubuntu-latest
+    name: Lint and Validate
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Lint shell scripts
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: './scripts'
+          format: gcc
+          severity: warning
+
+      - name: Validate Docker Compose files
+        run: |
+          # Install docker-compose
+          sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+          
+          # Validate docker-stack.yml
+          docker-compose -f docker-stack.yml config -q
+          
+          # Validate example configurations
+          for file in examples/*/docker-stack*.yml; do
+            if [ -f "$file" ]; then
+              echo "Validating $file"
+              docker-compose -f "$file" config -q
+            fi
+          done
+
+      - name: Validate Markdown links
+        uses: gaurav-nelson/github-action-markdown-link-check@v1
+        with:
+          use-quiet-mode: 'yes'
+          use-verbose-mode: 'yes'
+          config-file: '.github/workflows/markdown-link-config.json'
+
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          format: sarif
+          output-file: hadolint-results.sarif
+          no-fail: true
+
+      - name: Upload Hadolint results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif-file: hadolint-results.sarif
+
+  # Security scanning
+  security:
+    runs-on: ubuntu-latest
+    name: Security Scan
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif-file: 'trivy-results.sarif'
+
+      - name: Scan for secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+          extra_args: --debug --only-verified
+
+  # Build and test
+  build:
+    runs-on: ubuntu-latest
+    name: Build and Test
+    needs: [lint, security]
+    strategy:
+      matrix:
+        docker-version: ['24.0', '25.0', '26.0']
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker ${{ matrix.docker-version }}
+        uses: docker/setup-buildx-action@v3
+        with:
+          version: v${{ matrix.docker-version }}.0
+
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ matrix.docker-version }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-${{ matrix.docker-version }}-
+            ${{ runner.os }}-buildx-
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --cache-from type=local,src=/tmp/.buildx-cache \
+            --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max \
+            --tag claude-flow-alpha:test \
+            .
+
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+      - name: Test Docker image
+        run: |
+          # Test that the image runs
+          docker run --rm --name claude-flow-test \
+            -e NODE_ENV=test \
+            -d claude-flow-alpha:test
+          
+          # Wait for container to start
+          sleep 30
+          
+          # Check if container is still running
+          if docker ps | grep claude-flow-test; then
+            echo "Container started successfully"
+            docker stop claude-flow-test
+          else
+            echo "Container failed to start"
+            docker logs claude-flow-test
+            exit 1
+          fi
+
+      - name: Initialize Docker Swarm
+        run: |
+          docker swarm init
+
+      - name: Create test secrets
+        run: |
+          echo 'test-api-key' | docker secret create anthropic_api_key -
+
+      - name: Test swarm deployment
+        run: |
+          # Copy test configuration
+          cp examples/basic/docker-stack-basic.yml docker-stack-test.yml
+          
+          # Update image name for test
+          sed -i 's/claude-flow-alpha:latest/claude-flow-alpha:test/' docker-stack-test.yml
+          
+          # Deploy to swarm
+          docker stack deploy -c docker-stack-test.yml claude-flow-test
+          
+          # Wait for service to be ready
+          timeout 300 bash -c 'until docker service ps claude-flow-test_claude-flow-alpha --filter desired-state=running --format "{{.CurrentState}}" | grep -q "Running"; do sleep 10; done'
+          
+          # Test service health
+          docker service ps claude-flow-test_claude-flow-alpha
+          
+          # Cleanup
+          docker stack rm claude-flow-test
+          docker service ls
+
+  # Integration tests
+  integration:
+    runs-on: ubuntu-latest
+    name: Integration Tests
+    needs: [build]
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build test image
+        run: |
+          docker build --tag claude-flow-alpha:integration .
+
+      - name: Initialize Docker Swarm
+        run: |
+          docker swarm init
+
+      - name: Create test secrets
+        run: |
+          echo 'test-api-key-integration' | docker secret create anthropic_api_key -
+
+      - name: Deploy for integration testing
+        run: |
+          # Use basic configuration for testing
+          cp examples/basic/docker-stack-basic.yml docker-stack-integration.yml
+          sed -i 's/claude-flow-alpha:latest/claude-flow-alpha:integration/' docker-stack-integration.yml
+          
+          # Deploy
+          docker stack deploy -c docker-stack-integration.yml claude-flow-integration
+          
+          # Wait for deployment
+          timeout 300 bash -c 'until docker service ps claude-flow-integration_claude-flow-alpha --filter desired-state=running --format "{{.CurrentState}}" | grep -q "Running"; do sleep 10; done'
+
+      - name: Wait for service to be ready
+        run: |
+          # Wait for API to be responsive
+          timeout 300 bash -c 'until curl -s http://localhost:4000/api/status > /dev/null; do sleep 10; done'
+
+      - name: Run health checks
+        run: |
+          chmod +x scripts/utils/health-check.sh
+          ./scripts/utils/health-check.sh --timeout 30
+
+      - name: Test API endpoints
+        run: |
+          # Test status endpoint
+          response=$(curl -s http://localhost:4000/api/status)
+          echo "API Status Response: $response"
+          
+          # Check if response contains expected fields
+          if echo "$response" | grep -q "status"; then
+            echo "✅ API status endpoint working"
+          else
+            echo "❌ API status endpoint failed"
+            exit 1
+          fi
+
+      - name: Test WebSocket connectivity
+        run: |
+          # Test WebSocket upgrade
+          ws_response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Connection: Upgrade" \
+            -H "Upgrade: websocket" \
+            -H "Sec-WebSocket-Key: dGVzdA==" \
+            -H "Sec-WebSocket-Version: 13" \
+            http://localhost:4000/ws)
+          
+          if [ "$ws_response" = "101" ]; then
+            echo "✅ WebSocket endpoint working"
+          else
+            echo "❌ WebSocket endpoint failed (HTTP $ws_response)"
+            exit 1
+          fi
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          echo "=== Service Status ==="
+          docker service ls
+          docker service ps claude-flow-integration_claude-flow-alpha
+          
+          echo "=== Service Logs ==="
+          docker service logs claude-flow-integration_claude-flow-alpha
+          
+          echo "=== Container Logs ==="
+          docker logs $(docker ps -q --filter ancestor=claude-flow-alpha:integration) || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stack rm claude-flow-integration || true
+          docker secret rm anthropic_api_key || true
+
+  # Performance tests
+  performance:
+    runs-on: ubuntu-latest
+    name: Performance Tests
+    needs: [integration]
+    if: github.ref == 'refs/heads/main' || github.event_name == 'release'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build performance test image
+        run: |
+          docker build --tag claude-flow-alpha:performance .
+
+      - name: Initialize Docker Swarm
+        run: |
+          docker swarm init
+
+      - name: Create test secrets
+        run: |
+          echo 'test-api-key-performance' | docker secret create anthropic_api_key -
+
+      - name: Deploy for performance testing
+        run: |
+          cp examples/basic/docker-stack-basic.yml docker-stack-performance.yml
+          sed -i 's/claude-flow-alpha:latest/claude-flow-alpha:performance/' docker-stack-performance.yml
+          
+          docker stack deploy -c docker-stack-performance.yml claude-flow-performance
+          timeout 300 bash -c 'until curl -s http://localhost:4000/api/status > /dev/null; do sleep 10; done'
+
+      - name: Install performance testing tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apache2-utils
+
+      - name: Run performance tests
+        run: |
+          echo "Running basic load test..."
+          
+          # Test API endpoint performance
+          ab -n 100 -c 10 -T 'application/json' http://localhost:4000/api/status
+          
+          # Test WebUI performance
+          ab -n 50 -c 5 http://localhost:4000/console/
+
+      - name: Monitor resource usage
+        run: |
+          echo "=== Resource Usage ==="
+          docker stats --no-stream
+          
+          echo "=== Service Status ==="
+          docker service ps claude-flow-performance_claude-flow-alpha
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stack rm claude-flow-performance || true
+          docker secret rm anthropic_api_key || true
+
+  # Build and publish container image
+  publish:
+    runs-on: ubuntu-latest
+    name: Build and Publish Image
+    needs: [integration]
+    if: github.event_name == 'release' && github.event.action == 'published'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKER_USERNAME }}/claude-flow-alpha
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Deploy documentation
+  docs:
+    runs-on: ubuntu-latest
+    name: Deploy Documentation
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: |
+          npm install -g @vuepress/cli vuepress
+
+      - name: Build documentation
+        run: |
+          # Create VuePress config if needed
+          mkdir -p docs/.vuepress
+          echo "module.exports = { title: 'Claude Flow v2', description: 'Docker Swarm Deployment Guide' }" > docs/.vuepress/config.js
+          
+          # Build docs
+          vuepress build docs
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/.vuepress/dist
